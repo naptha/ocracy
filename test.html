@@ -5,10 +5,11 @@
 <script>
 
 var lineheight = 28, 
-    hiddensize = 50,
-    noutput    = 156;
+    hiddensize = 50;
 
-net = new SequenceRecognizer(lineheight, hiddensize, noutput);
+codec = [""," ","!","\"","#","$","%","&","'","(",")","*","+",",","-",".","/","0","1","2","3","4","5","6","7","8","9",":",";","<","=",">","?","@","A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z","[","\\","]","^","_","`","a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z","{","|","}","~","¡","¢","£","§","©","«","®","°","¶","»","¿","À","Â","Ä","Æ","Ç","È","É","Ê","Ë","Î","Ï","Ô","Ö","Ù","Û","Ü","ß","à","â","ä","æ","ç","è","é","ê","ë","î","ï","ô","ö","÷","ù","û","ü","ÿ","Œ","œ","Ÿ","†","‡","•","‣","‹","›","€","∙","▪","▫","◦"]
+
+net = new SequenceRecognizer(lineheight, hiddensize, codec);
 
 var parallel = net.lstm.nets[0],
     softmax  = net.lstm.nets[1],
@@ -48,66 +49,10 @@ rev.WOP = vecparse(revWOP);
 softmax.W = softW.map(vecparse)
 softmax.B = vecparse(softB);
 
-code2char = [""," ","!","\"","#","$","%","&","'","(",")","*","+",",","-",".","/","0","1","2","3","4","5","6","7","8","9",":",";","<","=",">","?","@","A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z","[","\\","]","^","_","`","a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z","{","|","}","~","¡","¢","£","§","©","«","®","°","¶","»","¿","À","Â","Ä","Æ","Ç","È","É","Ê","Ë","Î","Ï","Ô","Ö","Ù","Û","Ü","ß","à","â","ä","æ","ç","è","é","ê","ë","î","ï","ô","ö","÷","ù","û","ü","ÿ","Œ","œ","Ÿ","†","‡","•","‣","‹","›","€","∙","▪","▫","◦"]
-console.log(net.predictString(img01000a))
 
-
-
-// function makemat(arr){
-//     return arr.map(function(list){
-//         var n = new Float32Array(list.length);
-//         // n.set(list)
-//         // 126 - 32
-//         // except 92  34 39
-//         for(var i = 0; i < list.length; i++){
-//             n[i] = Math.round(list[i] * 8) / 8
-//         }
-        
-        
-//         console.log(Math.max.apply(Math, n), Math.min.apply(Math, n))
-//         return n
-//     })
-// }
-
-
-// function makemat(arr){
-    // var range = 3;
-    // var dict = '';
-    // for(var i = 32; i < 126; i++){
-    //     if(i == 92 || i == 34 || i == 39 || i == 60) continue;
-    //     dict += String.fromCharCode(i)
-    // }
-//     var str = '';
-//     for(var k = 0; k < arr.length; k++){
-//         var list = arr[k];
-//         for(var i = 0; i < list.length; i++){
-//             // perhaps use mu-law encoding to enhance dynamic range-ish?
-//             var n = Math.round((dict.length - 1) * (Math.max(-range, Math.min(range, list[i])) + range)/(2 * range));
-//             if(n < 0 || n >= dict.length) console.log(list[i]);
-//             str += dict[n]
-//         }
-//     }
-//     console.log(str)
-//     var width = arr[0].length, out = [];
-//     for(var i = 0; i < str.length; i += width){
-//         var n = new Float32Array(width)
-//         for(var j = 0; j < width; j++){
-//             n[j] = 2 * range * dict.indexOf(str[i + j]) / (dict.length - 1) - range   
-//         }
-//         out.push(n)
-//     }
-//     return out;
-// }
-
-
-// function vectranspose(mat){
-//     var arr = new Float32Array(mat.length);
-//     for(var i = 0; i < mat.length; i++){
-//         // assert(mat[i].length == 1)
-//         // arr[i] = mat[i][0];
-//         arr[i] = Math.round(mat[i][0] * 8) / 8
-//     }
-//     return arr;
-// }
-
+console.time('recognition start');
+[img010001, img010002, img010003, img010004, img010005, img010006, img010007, img010008, img010009, img01000a, img01000b, img01000c, img01000d, img01000e, img01000f, img010010, img010011, img010012, img010013, img010014, img010015, img010016, img010017, img010018, img010019, img01001a].forEach(function(image){
+    console.log(net.predictString(image))
+})
+console.timeEnd('recognition start')
 </script>

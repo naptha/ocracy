@@ -55,11 +55,24 @@ function rmat(m){
             m[i][j] = NaN;
 }
 
-
-function array_max(n){
+// returns the index of the maximal element
+function max_index(n){
     var m = n[0], b = 0;
     for(var i = 1; i < n.length; i++)
         if(n[i] > m) m = n[b = i];
+    return b;
+}
+
+// returns the maximal element according to a metric
+function max_element(n, metric){
+    var m = metric(n[0]), b = n[0];
+    for(var i = 1; i < n.length; i++){
+        var v = metric(n[i]);
+        if(v > m){
+            m = v;
+            b = n[i];
+        }
+    }
     return b;
 }
 

@@ -30,6 +30,10 @@ function hfunc(vec){
     return arr;
 }
 
+// This is a standard LSTM network with all the forward propagation formulas
+// optimized for speed. The lack of a real numpy-type standard numerics
+// package pretty much means I have to unroll the loops anyway so whatever. 
+
 function LSTM(Ni, Ns) {
     this.Ni = Ni;
     this.Ns = Ns;
@@ -37,6 +41,9 @@ function LSTM(Ni, Ns) {
     this.allocate(5000)
     this.reset()
 }
+
+// Allocate space for the internal state variables, maxlen represents the
+// maximum length (width of any line) that can be processed
 
 LSTM.prototype.allocate = function(maxlen){
     this.cix    = mat(maxlen, this.Ns) 
@@ -52,6 +59,7 @@ LSTM.prototype.allocate = function(maxlen){
     this.source = mat(maxlen, this.Na)
 }
 
+// Reset the internal state variables to NaN (anananananana batman!)
 LSTM.prototype.reset = function(){
     rmat(this.cix); rmat(this.ci)
     rmat(this.gix); rmat(this.gi)
@@ -61,6 +69,11 @@ LSTM.prototype.reset = function(){
     rmat(this.state)
     rmat(this.output)
 }
+
+// Performs forward propagation of activations and updates internal
+// state. The input is a 2D array with rows representing input 
+// vectors at each time step. Returns a 2D array whose rows represent
+// output vectors for each input vector
 
 LSTM.prototype.forward = function(xs){
     // assert(xs[0].length == this.Ni)
@@ -107,6 +120,7 @@ LSTM.prototype.forward = function(xs){
     return this.output.slice(0, n)
 }
 
+// Stack two or more networks on top of each other
 function Stacked(nets){ this.nets = nets }
 
 Stacked.prototype.forward = function(xs) {
@@ -115,11 +129,13 @@ Stacked.prototype.forward = function(xs) {
     return xs;
 }
 
+// A time-reversed network
 function Reversed(net){ this.net = net }
 Reversed.prototype.forward = function(xs) {
     return this.net.forward(xs.slice(0).reverse()).slice(0).reverse();
 };
 
+// Run multiple networks on the same input in parallel
 function Parallel(nets){ this.nets = nets }
 Parallel.prototype.forward = function(xs) {
     var a = this.nets[0].forward(xs),
@@ -132,6 +148,7 @@ Parallel.prototype.forward = function(xs) {
     return m;
 }
 
+// A softmax layer
 function Softmax(Nh, No){
     this.Nh = Nh;
     this.No = No;
@@ -158,7 +175,7 @@ Softmax.prototype.forward = function(ys){
 }
 
 // A bidirectional LSTM constructed from regular and reversed LSTMs.
-function BIDILSDM(Ni, Ns, No){
+function BiDiLSTM(Ni, Ns, No){
     var lstm1 = new LSTM(Ni, Ns),
         lstm2 = new Reversed(new LSTM(Ni, Ns)),
         bidi  = new Parallel([lstm1, lstm2]),
@@ -167,11 +184,12 @@ function BIDILSDM(Ni, Ns, No){
     return stack;
 }
 
-function SequenceRecognizer(ninput, nstates, noutput) {
+function SequenceRecognizer(ninput, nstates, codec) {
+    this.codec = codec;
     this.Ni   = ninput;
     this.Ns   = nstates;
-    this.No   = noutput;
-    this.lstm = BIDILSDM(this.Ni, this.Ns, this.No);
+    this.No   = codec.length;
+    this.lstm = BiDiLSTM(this.Ni, this.Ns, this.No);
 }
 
 // predict an integer sequence of codes
@@ -179,12 +197,27 @@ SequenceRecognizer.prototype.predictSequence = function(xs) {
     if(xs[0].length != this.Ni) throw "wrong image height";
     this.output = this.lstm.forward(xs);
 
-    return array_split(this.output
-        .map(x=>Math.max.apply(Math, x) > 0.6 && x)
-        .filter(x=>x)
-        .map(x=>array_max(x)))
-};
+    // return array_split(this.output
+    //     .map(x => Math.max.apply(Math, x) > 0.6 && x)
+    //     .filter(x => x)
+    //     .map(x => max_index(x))).map(x=>x[0])
+
+    // return array_split(this.output
+    //     .map(x => Math.max.apply(Math, x) > 0.6 && x)
+    //     .filter(x => x)
+    //     .map(x => max_index(x)),
+    //     (a,b) => (a == 0 && b == 0) || (a != 0 && b != 0) 
+    //     ).map(x=>x[0])
+
+    return array_split(
+            this.output.map(x => [max_index(x), Math.max.apply(Math, x)]), 
+            (a,b) => (a[0] == 0 && b[0] == 0) || (a[0] != 0 && b[0] != 0)
+        )
+        .map(k => max_element(k, x => x[1]))
+        .filter(k => k[1] > 0.7)
+        .map(x => x[0])
+}
 
 SequenceRecognizer.prototype.predictString = function(xs) {
-    return this.predictSequence(xs).map(x=>code2char[x[0]]).join('')
-};
+    return this.predictSequence(xs).map(x=>this.codec[x]).join('')
+}
