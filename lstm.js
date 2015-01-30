@@ -32,7 +32,7 @@ function hfunc(vec){
 
 // This is a standard LSTM network with all the forward propagation formulas
 // optimized for speed. The lack of a real numpy-type standard numerics
-// package pretty much means I have to unroll the loops anyway so whatever. 
+// package pretty much means I have to unroll the loops anyway so whatever.
 
 function LSTM(Ni, Ns) {
     this.Ni = Ni;
@@ -46,13 +46,13 @@ function LSTM(Ni, Ns) {
 // maximum length (width of any line) that can be processed
 
 LSTM.prototype.allocate = function(maxlen){
-    this.cix    = mat(maxlen, this.Ns) 
-    this.ci     = mat(maxlen, this.Ns) 
-    this.gix    = mat(maxlen, this.Ns) 
-    this.gi     = mat(maxlen, this.Ns) 
-    this.gox    = mat(maxlen, this.Ns) 
-    this.go     = mat(maxlen, this.Ns) 
-    this.gfx    = mat(maxlen, this.Ns) 
+    this.cix    = mat(maxlen, this.Ns)
+    this.ci     = mat(maxlen, this.Ns)
+    this.gix    = mat(maxlen, this.Ns)
+    this.gi     = mat(maxlen, this.Ns)
+    this.gox    = mat(maxlen, this.Ns)
+    this.go     = mat(maxlen, this.Ns)
+    this.gfx    = mat(maxlen, this.Ns)
     this.gf     = mat(maxlen, this.Ns)
     this.state  = mat(maxlen, this.Ns)
     this.output = mat(maxlen, this.Ns)
@@ -71,7 +71,7 @@ LSTM.prototype.reset = function(){
 }
 
 // Performs forward propagation of activations and updates internal
-// state. The input is a 2D array with rows representing input 
+// state. The input is a 2D array with rows representing input
 // vectors at each time step. Returns a 2D array whose rows represent
 // output vectors for each input vector
 
@@ -88,10 +88,10 @@ LSTM.prototype.forward = function(xs){
         this.source[t].set(xs[t], 1)
         this.source[t].set(prev, 1 + this.Ni)
         for(var j = 0; j < this.Ns; j++){
-            this.gix[t][j] = 0; 
-            this.gfx[t][j] = 0; 
-            this.gox[t][j] = 0; 
-            this.cix[t][j] = 0; 
+            this.gix[t][j] = 0;
+            this.gfx[t][j] = 0;
+            this.gox[t][j] = 0;
+            this.cix[t][j] = 0;
             for(var k = 0; k < this.Na; k++){
                 var sk = this.source[t][k];
                 this.gix[t][j] += this.WGI[j][k] * sk
@@ -149,18 +149,18 @@ Parallel.prototype.forward = function(xs) {
 }
 
 // A softmax layer
-function Softmax(Nh, No){
+function Softmax(Nh){
     this.Nh = Nh;
-    this.No = No;
 }
 
 Softmax.prototype.forward = function(ys){
     var n  = ys.length,
-        zs = [];
+        zs = [],
+        No = this.W.length;
     for(var i = 0; i < n; i++){
-        var temp = new Float32Array(this.No),
+        var temp = new Float32Array(No),
             total = 0;
-        for(var j = 0; j < this.No; j++){
+        for(var j = 0; j < No; j++){
             var v = this.B[j]
             for(var k = 0; k < this.Nh; k++){
                 v += this.W[j][k] * ys[i][k]
@@ -168,18 +168,18 @@ Softmax.prototype.forward = function(ys){
             temp[j] = Math.exp(Math.min(100, Math.max(-100, v)))
             total += temp[j]
         }
-        for(var j = 0; j < this.No; j++) temp[j] /= total;
+        for(var j = 0; j < No; j++) temp[j] /= total;
         zs[i] = temp;
     }
     return zs;
 }
 
 // A bidirectional LSTM constructed from regular and reversed LSTMs.
-function BiDiLSTM(Ni, Ns, No){
+function BiDiLSTM(Ni, Ns){
     var lstm1 = new LSTM(Ni, Ns),
         lstm2 = new Reversed(new LSTM(Ni, Ns)),
         bidi  = new Parallel([lstm1, lstm2]),
-        soft  = new Softmax(2 * Ns, No),
+        soft  = new Softmax(2 * Ns),
         stack = new Stacked([bidi, soft]);
     return stack;
 }
@@ -189,7 +189,7 @@ function SequenceRecognizer(ninput, nstates, codec) {
     this.Ni   = ninput;
     this.Ns   = nstates;
     this.No   = codec.length;
-    this.lstm = BiDiLSTM(this.Ni, this.Ns, this.No);
+    this.lstm = BiDiLSTM(this.Ni, this.Ns);
 }
 
 // predict an integer sequence of codes
@@ -206,18 +206,68 @@ SequenceRecognizer.prototype.predictSequence = function(xs) {
     //     .map(x => Math.max.apply(Math, x) > 0.6 && x)
     //     .filter(x => x)
     //     .map(x => max_index(x)),
-    //     (a,b) => (a == 0 && b == 0) || (a != 0 && b != 0) 
+    //     (a,b) => (a == 0 && b == 0) || (a != 0 && b != 0)
     //     ).map(x=>x[0])
 
-    return array_split(
-            this.output.map(x => [max_index(x), Math.max.apply(Math, x)]), 
-            (a,b) => (a[0] == 0 && b[0] == 0) || (a[0] != 0 && b[0] != 0)
-        )
-        .map(k => max_element(k, x => x[1]))
-        .filter(k => k[1] > 0.7)
-        .map(x => x[0])
+    // return array_split(
+    //         this.output.map(x => [max_index(x), Math.max.apply(Math, x)]),
+    //         (a,b) => (a[0] == 0 && b[0] == 0) || (a[0] != 0 && b[0] != 0)
+    //     )
+    //     .map(k => max_element(k, x => x[1]))
+    //     .filter(k => k[1] > 0.7)
+    //     .map(x => x[0])
+
+    // return array_split(
+    //         this.output.map(function(x){ return [max_index(x), Math.max.apply(Math, x)] }),
+    //         function(a,b){ return (a[0] == 0 && b[0] == 0) || (a[0] != 0 && b[0] != 0) }
+    //     )
+    //     .map(function(k){return max_element(k, function(x){ return x[1] })})
+    //     .filter(function(k){return k[1] > 0.7})
+    //     .map(function(x){return x[0]})
+
+    function f(e){ return 1 - e[0] > 0.7 }
+
+    // var merp = array_conv3(this.output.map(function(e){ return 1 - e[0] }), function(a, b, c){
+    //     // return Math.max(a, b, c) * 0.5 + b * 0.5
+    //     // return Math.exp(b) / (Math.exp(a) + Math.exp(b) + Math.exp(c))
+    //     // return Math.max(a, b, c)
+    //     // return 0.1 * a + 0.8 * b + 0.1 * c;
+    //     // return Math.max(a, b) / 2 + Math.max(b, c) / 2
+    //     return Math.max(b, c)
+    //     // return Math.max(a, b, c) / 2 + Math.min(a, b, c) / 2
+    // });
+    
+    // // console.log(merp)
+
+    // function g(e){ return e > 0.6 }
+
+    // return array_split(this.output.map(function(e, i){ return [e, merp[i]] }), function(a, b){
+    //     return g(a[1]) == g(b[1])
+    // })
+
+
+    return array_split(this.output, function(a, b){
+        // TODO: it might be a good idea to memoize this so f isn't called as much
+        // not for performance (because this part is not close to the perf bottleneck)
+        // but perhaps code clarity
+        return f(a) == f(b)
+    })
+    // .map(function(e){
+    //     // console.log(e)
+    //     // return e[0] 
+    //     // return e.map(function(k){ return k[0] })
+    // })
+    .filter(function(e){
+        // return f(e[0]) // remove the groups not meeting the threshold
+        return array_sum(e.map(function(k){return 1-k[0]})) > 0.9
+    }).map(function(e){
+        // console.log(e)
+        return max_index(array_zip(e).map(array_mean))
+    })
 }
 
+
 SequenceRecognizer.prototype.predictString = function(xs) {
-    return this.predictSequence(xs).map(x=>this.codec[x]).join('')
+    // return this.predictSequence(xs).map(x=>this.codec[x]).join('')
+    return this.predictSequence(xs).map(function(x){return this.codec[x]}).join('')
 }

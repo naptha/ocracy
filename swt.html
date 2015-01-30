@@ -1,0 +1,505 @@
+<canvas id="canvas"></canvas>
+<script src="jsfeat-custom.js"></script>
+<script src="lodash.js"></script>
+
+<script>
+var img = new Image();
+img.src = 'aim916.png';
+
+var canvas = document.getElementById('canvas');
+var ctx = canvas.getContext('2d')
+
+img.onload = function(){
+	canvas.width = img.naturalWidth;
+	canvas.height = img.naturalHeight;
+	ctx.drawImage(img, 0, 0);
+	var data = ctx.getImageData(0, 0, canvas.width, canvas.height)
+	textdetect(data)
+}
+
+var params = {
+	// the kernel size for the gaussian blur before canny
+	kernel_size: 3,
+	// low and high thresh are parameters for the canny edge detector
+	low_thresh: 124,
+	high_thresh: 204,
+	// maximum stroke width, this is the number of iterations
+	// the core stroke width transform loop will go through 
+	// before giving up and saying that there is no stroke here
+	max_stroke: 35,
+	// the maximum ratio between adjacent strokes for the 
+	// connected components algorithm to consider part of the
+	// same actual letter
+	stroke_ratio: 2,
+	// this is the pixel connectivity required for stuff to happen
+	min_connectivity: 4,
+	// the minimum number of pixels in a connected component to
+	// be considered a candidate for an actual letter
+	min_area: 30, //default: 38
+	// maximum stroke width variation allowed within a letter
+	std_ratio: 0.83,
+	// maximum aspect ratio to still be considered a letter
+	// for instance, a really long line wouldn't be considered
+	// a letter (obviously if this number is too low, it'll start
+	// excluding l's 1's and i's which would be bad)
+	aspect_ratio: 10, // default: 8
+	// maximum ratio between the median thicknesses of adjacent 
+	// letters to be considered part of the same line
+	thickness_ratio: 3,
+	// maximum ratio between adjacent letter heights to be considered
+	// part of the same line
+	height_ratio: 2.5, // original: 1.7
+}
+
+function textdetect(src){
+	width = src.width
+	height = src.height;
+	
+	var img_u8 = new jsfeat.matrix_t(width, height, jsfeat.U8C1_t)
+	var img_dxdy = new jsfeat.matrix_t(width, height, jsfeat.S32C2_t);
+
+	console.time("image processing")
+	jsfeat.imgproc.grayscale(src.data, img_u8.data)
+	// visualize_matrix(img_u8)
+	jsfeat.imgproc.sobel_derivatives(img_u8, img_dxdy)
+	jsfeat.imgproc.gaussian_blur(img_u8, img_u8, params.kernel_size, 0)
+	jsfeat.imgproc.canny(img_u8, img_u8, params.low_thresh, params.high_thresh)
+
+	console.timeEnd("image processing")
+
+	params.direction = -1
+	swt = raw_swt(img_u8, img_dxdy, params).swt;
+	console.time('connected components')
+	contours = connected_swt(swt, params).map(wrap_contours);
+	console.timeEnd('connected components')
+	c = visualize_matrix(swt, contours)
+
+
+	console.time('ransac')
+
+	var besta, bestb, besti = 0;
+	for(var iter = 0; iter < 200; iter++){
+	do {
+		var sample = _.sample(contours, 2);
+		var a = sample[0], b = sample[1];
+	} while (Math.abs(a.cy - b.cy) > 100 || Math.abs(a.cy - b.cy) < 10 || Math.abs(a.cx - b.cx) > 50);
+	
+	// c.beginPath()
+	// c.moveTo(a.cx, a.cy)
+	// c.lineTo(b.cx, b.cy)
+	// c.strokeStyle = 'orange'
+	// c.lineWidth = 4
+	// c.stroke()
+
+
+	// c.beginPath()
+	// // c.moveTo(a.cx, a.cy)
+	// for(var n = -10; n < 10; n++){
+	// 	c.moveTo(a.cx + (b.cx - a.cx) * n - (b.cy - a.cy) * 100, a.cy + (b.cy - a.cy) * n + (b.cx - a.cx) * 100)
+	// 	c.lineTo(a.cx + (b.cx - a.cx) * n + (b.cy - a.cy) * 100, a.cy + (b.cy - a.cy) * n - (b.cx - a.cx) * 100)
+	// 	c.strokeStyle = 'orange'
+	// 	c.lineWidth = 1
+	// 	c.stroke()
+	// }
+
+
+	// var angle = Math.atan2(a.cy - b.cy, a.cx - b.cx);
+	var inliers = 0;
+	var len = Math.sqrt(Math.pow((b.cx - a.cx), 2) + Math.pow(b.cy - a.cy, 2))
+	for(var i = 0; i < contours.length; i++){
+	var s = contours[i]
+	// do {
+	// 	var s = _.sample(contours);
+	// } while (Math.abs(a.cy - s.cy) > 100);
+
+
+	// do a dot product to project something onto something else
+	
+	var a1 = (s.cx - a.cx) * (b.cx - a.cx) / len + (s.cy - a.cy) * (b.cy - a.cy) / len;
+
+	// c.beginPath()
+	// // c.moveTo(a.cx, a.cy)
+	// c.moveTo(a.cx + (b.cx - a.cx) * a1 / len, a.cy + (b.cy - a.cy) * a1 / len)
+	// c.lineTo(s.cx, s.cy)
+	// c.strokeStyle = 'blue'
+	// c.lineWidth = 1
+	// c.stroke()
+
+	var err = Math.abs(Math.abs(a1 % len) - len/2) - len/2;
+
+	if(Math.abs(err) < 10){
+		// c.beginPath()
+		// c.moveTo(a.cx, a.cy)
+		// c.lineTo(s.cx, s.cy)
+		// c.strokeStyle = 'green'
+		// c.lineWidth = 4
+		// c.stroke()
+		// c.fillStyle = 'green'
+		// c.fillRect(s.cx - 5, s.cy - 5, 10, 10)
+		inliers++;
+	}else{
+		// c.beginPath()
+		// c.moveTo(a.cx, a.cy)
+		// c.lineTo(s.cx, s.cy)
+		// c.strokeStyle = 'red'
+		// c.lineWidth = 4
+		// c.stroke()
+		// c.fillStyle = 'red'
+		// c.fillRect(s.cx - 5, s.cy - 5, 10, 10)
+	}
+
+	}
+
+	// console.log(inliers)
+	if(inliers > besti){
+		besti = inliers;
+		besta = a;
+		bestb = b;
+	}
+}
+	console.log(besti)
+	c.beginPath()
+	var a = besta, b = bestb;
+	for(var n = -10; n < 10; n++){
+		c.moveTo(a.cx + (b.cx - a.cx) * n - (b.cy - a.cy) * 100, a.cy + (b.cy - a.cy) * n + (b.cx - a.cx) * 100)
+		c.lineTo(a.cx + (b.cx - a.cx) * n + (b.cy - a.cy) * 100, a.cy + (b.cy - a.cy) * n - (b.cx - a.cx) * 100)
+		c.strokeStyle = 'orange'
+		c.lineWidth = 1
+		c.stroke()
+	}
+
+
+	var len = Math.sqrt(Math.pow((b.cx - a.cx), 2) + Math.pow(b.cy - a.cy, 2))
+	var groups = {}
+	for(var i = 0; i < contours.length; i++){
+		var s = contours[i]
+		// do a dot product to project something onto something else
+		var a1 = (s.cx - a.cx) * (b.cx - a.cx) / len + (s.cy - a.cy) * (b.cy - a.cy) / len;
+		var err = Math.abs(Math.abs(a1 % len) - len/2) - len/2;
+
+		if(Math.abs(err) < 10){
+			var k = Math.round(a1 / len);
+			if(!groups[k]) groups[k] = 0;
+			groups[k]++
+		}
+
+	}
+	var tbound = 0, bbound = 0;
+
+	while(groups[tbound] > 0) tbound--;
+	while(groups[bbound] > 0) bbound++;
+
+	console.log(tbound, bbound)
+	c.beginPath()
+	var n = tbound;
+	c.moveTo(a.cx + (b.cx - a.cx) * n - (b.cy - a.cy) * 100, a.cy + (b.cy - a.cy) * n + (b.cx - a.cx) * 100)
+	c.lineTo(a.cx + (b.cx - a.cx) * n + (b.cy - a.cy) * 100, a.cy + (b.cy - a.cy) * n - (b.cx - a.cx) * 100)
+	var n = bbound;
+	c.moveTo(a.cx + (b.cx - a.cx) * n - (b.cy - a.cy) * 100, a.cy + (b.cy - a.cy) * n + (b.cx - a.cx) * 100)
+	c.lineTo(a.cx + (b.cx - a.cx) * n + (b.cy - a.cy) * 100, a.cy + (b.cy - a.cy) * n - (b.cx - a.cx) * 100)
+	c.strokeStyle = 'green'
+	c.lineWidth = 4
+	c.stroke()
+
+	console.timeEnd('ransac')
+
+}
+
+// hough transform, try to solve for a set of parallel lines at a particular orientation and line height (2 parameters)
+// alternatively, use rotating calipers to solve for the orientation of a region
+// or use rotating calipers as an initial estimate and do gradient-descent with hough transform (or ransac)
+
+
+function wrap_contours(points){
+	var size = points.length;
+	var x0 = Infinity, y0 = Infinity, x1 = 0, y1 = 0;
+	// var m10 = 0, m01 = 0, m11 = 0, m20 = 0, m02 = 0;
+	// var swtsum = 0, swtvar = 0, swts = [];
+	// var marksum = 0;
+	// var y_coords = []
+
+	for(var i = 0; i < size; i++){
+		var p = points[i];
+		var x = p % width, y = Math.floor(p / width);
+		x0 = Math.min(x0, x); y0 = Math.min(y0, y);
+		x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+
+		// y_coords.push(y)
+
+		// m10 += x; m01 += y;
+		// m11 += x * y;
+		// m20 += x * x; m02 += y * y;
+		// swtsum += swt.data[p];
+		
+		// if(marker) marksum += marker.data[p];
+
+		// swts.push(swt.data[p]);
+	}
+
+	// var aspect_ratio = Math.max(x1 - x0, y1 - y0) / Math.min(x1 - x0, y1 - y0)
+	
+	// var mean = swtsum / size;
+	
+	// for(var i = 0; i < size; i++){
+	// 	var p = points[i];
+	// 	swtvar += (swt.data[p] - mean) * (swt.data[p] - mean)
+	// }
+	// var xc = m10 / size, yc = m01 / size;
+	// var af = m20 / size - xc * xc;
+	// var bf = 2 * (m11 / size - xc * yc)
+	// var cf = m02 / size - yc * yc;
+	// var delta = Math.sqrt(bf * bf + (af - cf) * (af - cf));
+	// var ratio = Math.sqrt((af + cf + delta) / (af + cf - delta));
+	// ratio = Math.max(ratio, 1 / ratio)
+
+	// // if(ratio > params.aspect_ratio && !is_L) return;
+	// if(ratio > params.aspect_ratio) return;
+
+	// var median = swts.sort(function(a, b){return a - b})[Math.floor(swts.length / 2)]
+	// var std = Math.sqrt(swtvar / size);
+	// // if(std > mean * params.std_ratio) return;
+	// var area = (x1 - x0 + 1) * (y1 - y0 + 1)
+	
+	// if(size / area < 0.1) return;
+
+
+	var cy = y0 + (y1 - y0) / 2,
+		cx = x0 + (x1 - x0) / 2;
+
+	// if(x0 == 0 || y0 == 0 || y1 == height - 1 || x1 == width - 1) return;
+
+	// x-axis border touching is okay because we dont define our 
+	// clipping boundaries by them (that doesnt really make sense
+	// but im about to go to bed) so like our little chunks are all
+	// full width so things touching the edge arent artifacts
+
+	if(y0 == 0 || y1 == height - 1) return;
+	
+	return {
+		x0: x0,
+		y0: y0,
+		y1: y1,
+		x1: x1,
+		cx: cx,
+		cy: cy,
+		width: x1 - x0 + 1,
+		height: y1 - y0 + 1,
+		size: size,
+		// color: dominant_color(colors, direction),
+		// color: [sr/size, sg/size, sb/size],
+		// color: domcolor,
+		// ratio: (x1 - x0) / (y1 - y0), 
+		// ratio2: ratio,
+		// std: std,
+		// mean: mean,
+		// medy: y_coords.sort(function(a, b){ return a - b })[Math.floor(y_coords.length / 2)] - cy,
+		// area: area,
+		contours: points,
+		// markweight: marksum / size,
+		// thickness: median
+	}
+}
+
+// canny & sobel dx/dy
+function raw_swt(img_canny, img_dxdy, params){
+	var max_stroke = params.max_stroke, // maximum stroke width
+		direction = params.direction,
+		width = img_canny.cols,
+		height = img_canny.rows;
+
+	// nonzero Math.min function, if a is zero, returns b, otherwise minimizes
+	function nzmin(a, b){
+		if(a === 0) return b;
+		if(a < b) return a;
+		return b;
+	}
+	
+	var strokes = [];
+	var swt = new jsfeat.matrix_t(width, height, jsfeat.U8C1_t)
+	
+	console.time("first pass")
+	// first pass of stroke width transform 
+	for(var i = 0; i < width * height; i++){
+		if(img_canny.data[i] != 0xff) continue; // only apply on edge pixels
+
+		var itheta = Math.atan2(img_dxdy.data[(i<<1) + 1], img_dxdy.data[i<<1]); // calculate the image gradient at this point by sobel
+		var ray = [i];
+		var step = 1;
+		
+		var ix = i % width, iy = Math.floor(i / width);
+		while(step < max_stroke){
+			// extrapolate the ray outwards depending on search direction
+			// libccv is particularly clever in that it uses 
+			// bresenham's line drawing algorithm to pick out
+			// the points along the line and also checks 
+			// neighboring pixels for corners
+
+			var jx = Math.round(ix + Math.cos(itheta) * direction * step);
+			var jy = Math.round(iy + Math.sin(itheta) * direction * step);
+			step++;
+			if(jx < 0 || jy < 0 || jx > width || jy > height) break;
+			var j = jy * width + jx;
+			ray.push(j)
+			if(img_canny.data[j] != 0xff) continue;
+			// calculate theta for this ray since we've reached the other side
+			var jtheta = Math.atan2(img_dxdy.data[(j<<1) + 1], img_dxdy.data[j<<1]); 
+			
+			if(Math.abs(Math.abs(itheta - jtheta) - Math.PI) < Math.PI / 2){ // check if theta reflects the starting angle approximately
+				strokes.push(i)
+				var sw = Math.sqrt((jx - ix) * (jx - ix) + (jy - iy) * (jy - iy)) // derive the stroke width
+				for(var k = 0; k < ray.length; k++){ // iterate rays and set points along ray to minimum stroke width
+					swt.data[ray[k]] = nzmin(swt.data[ray[k]], sw) // use nzmin because it's initially all 0's
+				}
+			}
+			break;
+		}
+	}
+	console.timeEnd("first pass")
+	console.time("refinement pass")
+
+	// second pass, refines swt values as median
+	for(var k = 0; k < strokes.length; k++){
+		var i = strokes[k];
+		var itheta = Math.atan2(img_dxdy.data[(i<<1) + 1], img_dxdy.data[i<<1]);
+		var ray = [];
+		var widths = []
+		var step = 1;
+
+		var ix = i % width, iy = Math.floor(i / width);
+		while(step < max_stroke){
+			var jx = Math.round(ix + Math.cos(itheta) * direction * step);
+			var jy = Math.round(iy + Math.sin(itheta) * direction * step);
+			step++;
+			var j = jy * width + jx;
+			// record position of the ray and the stroke width there
+			widths.push(swt.data[j])
+			ray.push(j)			
+			// stop when the ray is terminated
+			if(img_canny.data[j] == 0xff) break;
+		}
+		var median = widths.sort(function(a, b){return a - b})[Math.floor(widths.length / 2)];
+		// set the high values to the median so that corners are nice
+		for(var j = 0; j < ray.length; j++){
+			swt.data[ray[j]] = nzmin(swt.data[ray[j]], median)
+		}
+		// swt.data[ray[0]] = 0
+		// swt.data[ray[ray.length - 1]] = 0
+	}
+
+	console.timeEnd("refinement pass")
+	
+	// TODO: get rid of strokes
+	return {
+		swt: swt,
+		strokes: strokes
+	}
+}
+
+
+
+// maybe in the future we should replace this with a strongly
+// connected components algorithm (or have some spatial heuristic to
+// determine how wise it would be to consider the connection valid)
+function connected_swt(swt, params){
+	var dx8 = [-1, 1, -1, 0, 1, -1, 0, 1];
+	var dy8 = [0, 0, -1, -1, -1, 1, 1, 1];
+	var width = swt.cols, 
+		height = swt.rows;
+
+	var marker = new jsfeat.matrix_t(width, height, jsfeat.U8C1_t)
+	var contours = []
+	
+	for(var i = 0; i < width * height; i++){
+		if(marker.data[i] || !swt.data[i]) continue;
+
+		var ix = i % width, iy = Math.floor(i / width)
+		
+		marker.data[i] = 1
+		var contour = []
+		var stack = [i]
+		var closed;
+		
+		while(closed = stack.shift()){
+			contour.push(closed)
+			var cx = closed % width, cy = Math.floor(closed / width);
+			var w = swt.data[closed];
+			for(var k = 0; k < 8; k++){
+				var nx = cx + dx8[k]
+				var ny = cy + dy8[k]
+				var n = ny * width + nx;
+
+				if(nx >= 0 && nx < width &&
+				   ny >= 0 && ny < height &&
+				   swt.data[n] &&
+				   !marker.data[n] &&
+				   swt.data[n] <= params.stroke_ratio * w &&
+				   swt.data[n] * params.stroke_ratio >= w){
+					marker.data[n] = 1
+					// update the average stroke width
+					w = (w * stack.length + swt.data[n]) / (stack.length + 1)
+					stack.push(n)
+				}
+			}
+		}
+		// contours.push(contour)
+		if(contour.length >= params.min_area){
+			contours.push(contour)	
+		}
+	}
+	return contours
+}
+
+
+
+function visualize_matrix(mat, letters){
+	var c = document.createElement('canvas')
+	c.width = mat.cols;
+	c.height = mat.rows;
+	var cx = c.getContext('2d')
+	var out = cx.createImageData(mat.cols, mat.rows);
+	for(var i = 0; i < mat.rows * mat.cols; i++){
+
+		out.data[i * 4 + 3] = 255
+		if(mat.data[i] == 1){
+			out.data[i * 4] = 255
+			// out.data[i * 4 + 1] = out.data[i * 4 + 2] = 30 * mat.data[i]
+		}else{
+			out.data[i * 4] = out.data[i * 4 + 1] = out.data[i * 4 + 2] = 30 * mat.data[i]	
+		}
+		
+	}
+	cx.putImageData(out, 0, 0)
+	
+	if(letters){
+		cx.strokeStyle = 'red'
+		for(var i = 0; i < letters.length; i++){
+			var letter = letters[i];
+			cx.strokeRect(letter.x0 + .5, letter.y0 + .5, letter.width, letter.height)
+		}
+
+		if(letters[0] && letters[0].letters){
+			// hey look not actually letters
+			letters.forEach(function(line){
+				cx.beginPath()
+				var colors = ['green', 'blue', 'red', 'purple', 'orange', 'yellow']
+				cx.strokeStyle = colors[Math.floor(colors.length * Math.random())]
+				cx.lineWidth = 3
+
+				line.letters
+					.sort(function(a, b){ return a.cx - b.cx })
+					.forEach(function(letter){
+						cx.lineTo(letter.cx, letter.cy)
+					})
+
+				cx.stroke()
+			})
+		}
+	}
+	document.body.appendChild(c)
+
+	// console.image(c.toDataURL('image/png'))
+
+	return cx
+}
+
+</script>

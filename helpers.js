@@ -91,3 +91,32 @@ function array_split(arr, test){
     if(buf.length) groups.push(buf);
     return groups
 }
+
+
+function array_zip(arr){
+    var out = [];
+    for(var i = 0; i < arr[0].length; i++){
+        var temp = []
+        for(var j = 0; j < arr.length; j++){
+            temp.push(arr[j][i])
+        }
+        out.push(temp)
+    }
+    return out
+}
+
+function array_sum(arr){
+    for(var i = 0, sum = 0; i < arr.length; i++) sum += arr[i];
+    return sum;
+}
+
+function array_mean(arr){
+    return array_sum(arr) / arr.length;
+}
+
+
+function array_conv3(arr, fn){
+    return arr.map(function(e, i){
+        return fn(arr[Math.max(0, i - 1)], arr[i], arr[Math.min(i + 1, arr.length - 1)])
+    })
+}
