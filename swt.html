@@ -66,6 +66,12 @@ function lineTo(a) { c.lineTo(a[0], a[1]) }
 
 
 
+function adiff(a, b){
+	var d = Math.abs(a - b) % (Math.PI * 2);
+	var r = d > Math.PI ? (Math.PI * 2) - d : d;
+	return Math.abs(r)
+}
+
 function textdetect(src){
 	width = src.width
 	height = src.height;
@@ -128,6 +134,7 @@ function textdetect(src){
 	}
 
 	console.time("rough line estimation")
+	// it might be possible to make this faster by using some spatial index
 	rough_lines = equivalence_classes(contours, function(a, b){
 		return boxdist(a, b) < 5;
 	}).filter(function(line){
@@ -148,6 +155,7 @@ function textdetect(src){
 		c.stroke()
 	})
 	
+
 	console.time('projective merging')
 	var a = rough_lines[0], b = rough_lines[2]
 	refined_lines = equivalence_classes(rough_lines, function(a, b){
@@ -172,60 +180,9 @@ function textdetect(src){
 		return wrap_line(_.flatten(_.pluck(lines, 'points')))
 	})
 	console.timeEnd('projective merging')
-	
 
-	// c.beginPath()
-	// moveTo(origin)
-	// lineTo(Add(origin, Mul(dir, -500)))
-	// c.strokeStyle = 'yellow'
-	// c.stroke()
 
-	// console.log(dist)
-
-	
-
-	// a.points.forEach(function(p){
-
-	// 	var a1 = Dot(Sub([p.cx, p.cy], origin), dir);
-	// 	var end = Add(origin, Mul(dir, a1))
-
-	// 	console.log(p, end, a1)
-	// 	c.beginPath()
-	// 	c.moveTo(p.cx, p.cy)
-	// 	c.lineTo(end[0], end[1])
-	// 	c.strokeStyle = 'blue'
-	// 	c.lineWidth = 2;
-	// 	c.stroke()
-	// })
-	// c.beginPath()
-
-	// a.points.forEach(function(p){
-	// 	c.lineTo(p.cx, p.cy)
-		
-	// })
-	// c.strokeStyle = 'teal'
-	// c.lineWidth = 5;
-	// c.stroke()
-
-	// c.beginPath()
-	// b.points.forEach(function(p){
-	// 	c.lineTo(p.cx, p.cy)
-	// })
-	// c.strokeStyle = 'orange'
-	// c.lineWidth = 5;
-	// c.stroke()
-	
-	// 
-	
-	// console.log('dist', dist)
-
-	function adiff(a, b){
-		var d = Math.abs(a - b) % (Math.PI * 2);
-		var r = d > Math.PI ? (Math.PI * 2) - d : d;
-		return Math.abs(r)
-	}
-
-	console.time('line merging')
+	console.time('angle merging')
 
 	function pairdist(x){
 		var a = x[0], b = x[1];
@@ -257,7 +214,7 @@ function textdetect(src){
 		return wrap_line(_.flatten(_.pluck(lines, 'points')))
 	})
 
-	console.timeEnd('line merging')
+	console.timeEnd('angle merging')
 
 	refined_lines.forEach(function(line){
 		var points = line.points;
@@ -266,13 +223,13 @@ function textdetect(src){
 		for(var i = 1; i < points.length; i++){
 			c.lineTo(points[i].cx, points[i].cy)
 		}
-		c.strokeStyle = 'green'
+		c.strokeStyle = 'gray'
 		c.lineWidth = 2;
 		c.stroke()
 	});
 
 	// largest empty rectangle algorithms
-	return
+	// return
 
 	console.time('ransac')
 
@@ -315,18 +272,34 @@ function textdetect(src){
 	
 	// console.log(a1)
 
-	vgroups = {}
-	for(var i = 0; i < contours.length; i++){
-		var s = contours[i];
+
+	var inliers = contours.map(function(s){
 		var a1 = Dot(Sub([s.cx, s.cy], origin), dir);
 		var err = Math.abs(Math.abs(a1 % len) - len/2) - len/2;
-
-		if(Math.abs(err) < 10){
-			var k = Math.round(a1 / len);
-			if(!vgroups[k]) vgroups[k] = 0;
-			vgroups[k]++
+		var b1 = Dot(Sub([s.cx, s.cy], origin), Rot90(dir));
+		return {
+			inlier: Math.abs(err) < 10,
+			k: Math.round(a1 / len),
+			j: Math.round(b1 / len)
 		}
-	}
+	}).filter(function(k){ return k.inlier })
+
+	vgroups =_.countBy(inliers, 'k')
+	// _.pluck(inliers, 'k')
+
+
+	// vgroups = {}
+	// for(var i = 0; i < contours.length; i++){
+	// 	var s = contours[i];
+	// 	var a1 = Dot(Sub([s.cx, s.cy], origin), dir);
+	// 	var err = Math.abs(Math.abs(a1 % len) - len/2) - len/2;
+
+	// 	if(Math.abs(err) < 10){
+	// 		var k = Math.round(a1 / len);
+	// 		if(!vgroups[k]) vgroups[k] = 0;
+	// 		vgroups[k]++
+	// 	}
+	// }
 
 	var tbound = 0, bbound = 0;
 	while(vgroups[tbound] > 0) tbound--;
@@ -346,45 +319,14 @@ function textdetect(src){
 
 	console.log(dir)
 
-	hgroups = {};
-	for(var i = 0; i < contours.length; i++){
-		var s = contours[i];
-		var a1 = Dot(Sub([s.cx, s.cy], origin), dir);
-		var k = Math.round(a1 / len);
-		if(k <= tbound || k >= bbound) continue;
-		var b1 = Dot(Sub([s.cx, s.cy], origin), Rot90(dir));
-		var j = Math.round(b1 / len);
-
-		var err = Math.abs(Math.abs(a1 % len) - len/2) - len/2;
-
-		if(Math.abs(err) < 10){			
-			if(!hgroups[j]) hgroups[j] = 0;
-			hgroups[j]++
-
-			c.fillStyle = 'purple'
-			c.fillRect(s.cx - 5, s.cy - 5, 10, 10)
-
-			// c.beginPath()
-			// moveTo(Add(Add(origin, Mul(Rot90(dir), len * j)), Mul(dir, -1000)))
-			// lineTo(Add(Add(origin, Mul(Rot90(dir), len * j)), Mul(dir,  1000)))
-			
-
-
-			c.beginPath()
-			moveTo(origin)
-			lineTo(Add(origin, Mul(Rot90(dir), b1)))
-			lineTo([s.cx, s.cy])
-			lineTo(origin)
-			c.strokeStyle = 'yellow'
-			c.lineWidth = 1
-			c.stroke()
-
-		}
-	}
+	inliers = inliers.filter(function(s){ return s.k > tbound && s.k < bbound })
+	hgroups =_.countBy(inliers, 'j')
 
 	var lbound = 0, rbound = 0;
 	while(hgroups[lbound] > 0) lbound--;
 	while(hgroups[rbound] > 0) rbound++;
+
+	inliers = inliers.filter(function(s){ return s.j > lbound && s.j < rbound })
 
 	for(var i = 0; i < contours.length; i++){
 		var s = contours[i];
@@ -397,13 +339,13 @@ function textdetect(src){
 
 		var err = Math.abs(Math.abs(a1 % len) - len/2) - len/2;
 
-		// if(Math.abs(err) < 10){			
-		// 	c.fillStyle = 'green'
-		// 	c.fillRect(s.cx - 5, s.cy - 5, 10, 10)
-		// }else{
-		// 	c.fillStyle = 'red'
-		// 	c.fillRect(s.cx - 5, s.cy - 5, 10, 10)
-		// }
+		if(Math.abs(err) < 10){			
+			c.fillStyle = 'green'
+			c.fillRect(s.cx - 5, s.cy - 5, 10, 10)
+		}else{
+			c.fillStyle = 'red'
+			c.fillRect(s.cx - 5, s.cy - 5, 10, 10)
+		}
 	}
 
 
@@ -503,10 +445,6 @@ function textdetect(src){
 function wrap_contours(points){
 	var size = points.length;
 	var x0 = Infinity, y0 = Infinity, x1 = 0, y1 = 0;
-	// var m10 = 0, m01 = 0, m11 = 0, m20 = 0, m02 = 0;
-	// var swtsum = 0, swtvar = 0, swts = [];
-	// var marksum = 0;
-	// var y_coords = []
 
 	for(var i = 0; i < size; i++){
 		var p = points[i];
@@ -514,57 +452,11 @@ function wrap_contours(points){
 		x0 = Math.min(x0, x); y0 = Math.min(y0, y);
 		x1 = Math.max(x1, x); y1 = Math.max(y1, y);
 
-		// y_coords.push(y)
-
-		// m10 += x; m01 += y;
-		// m11 += x * y;
-		// m20 += x * x; m02 += y * y;
-		// swtsum += swt.data[p];
-		
-		// if(marker) marksum += marker.data[p];
-
-		// swts.push(swt.data[p]);
 	}
-
-	// var aspect_ratio = Math.max(x1 - x0, y1 - y0) / Math.min(x1 - x0, y1 - y0)
-	
-	// var mean = swtsum / size;
-	
-	// for(var i = 0; i < size; i++){
-	// 	var p = points[i];
-	// 	swtvar += (swt.data[p] - mean) * (swt.data[p] - mean)
-	// }
-	// var xc = m10 / size, yc = m01 / size;
-	// var af = m20 / size - xc * xc;
-	// var bf = 2 * (m11 / size - xc * yc)
-	// var cf = m02 / size - yc * yc;
-	// var delta = Math.sqrt(bf * bf + (af - cf) * (af - cf));
-	// var ratio = Math.sqrt((af + cf + delta) / (af + cf - delta));
-	// ratio = Math.max(ratio, 1 / ratio)
-
-	// // if(ratio > params.aspect_ratio && !is_L) return;
-	// if(ratio > params.aspect_ratio) return;
-
-	// var median = swts.sort(function(a, b){return a - b})[Math.floor(swts.length / 2)]
-	// var std = Math.sqrt(swtvar / size);
-	// // if(std > mean * params.std_ratio) return;
-	// var area = (x1 - x0 + 1) * (y1 - y0 + 1)
-	
-	// if(size / area < 0.1) return;
-
 
 	var cy = y0 + (y1 - y0) / 2,
 		cx = x0 + (x1 - x0) / 2;
 
-	// if(x0 == 0 || y0 == 0 || y1 == height - 1 || x1 == width - 1) return;
-
-	// x-axis border touching is okay because we dont define our 
-	// clipping boundaries by them (that doesnt really make sense
-	// but im about to go to bed) so like our little chunks are all
-	// full width so things touching the edge arent artifacts
-
-	if(y0 == 0 || y1 == height - 1) return;
-	
 	return {
 		x0: x0,
 		y0: y0,
@@ -575,18 +467,7 @@ function wrap_contours(points){
 		width: x1 - x0 + 1,
 		height: y1 - y0 + 1,
 		size: size,
-		// color: dominant_color(colors, direction),
-		// color: [sr/size, sg/size, sb/size],
-		// color: domcolor,
-		// ratio: (x1 - x0) / (y1 - y0), 
-		// ratio2: ratio,
-		// std: std,
-		// mean: mean,
-		// medy: y_coords.sort(function(a, b){ return a - b })[Math.floor(y_coords.length / 2)] - cy,
-		// area: area,
-		contours: points,
-		// markweight: marksum / size,
-		// thickness: median
+		contours: points
 	}
 }
 
