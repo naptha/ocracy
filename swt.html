@@ -76,16 +76,7 @@ function textdetect(src){
 	console.timeEnd('connected components')
 	c = visualize_matrix(swt)
 
-	console.time("rough line estimation")
-	rough_lines = equivalence_classes(contours, function(a, b){
-		// return Math.sqrt(Math.pow(a.cx - b.cx, 2) + Math.pow(a.cy - b.cy, 2)) < 5
-		var width = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0),
-			height = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
-		var dist = Math.sqrt(Math.pow(Math.min(0, width), 2) + Math.pow(Math.min(0, height), 2));
-		return dist < 5;
-	}).filter(function(line){
-		return line.length > 1
-	}).map(function(points){
+	function wrap_line(points){
 		// linear regression to estimate slope
 		var sumx = 0, sumy=0, sumx2 = 0, sumy2 = 0, sumxy = 0;
 		for(var i = 0; i < points.length; i++){
@@ -112,21 +103,32 @@ function textdetect(src){
 			yi: yi,
 			points: points
 		}
-	})
+	}
+
+	console.time("rough line estimation")
+	rough_lines = equivalence_classes(contours, function(a, b){
+		// return Math.sqrt(Math.pow(a.cx - b.cx, 2) + Math.pow(a.cy - b.cy, 2)) < 5
+		var width = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0),
+			height = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+		var dist = Math.sqrt(Math.pow(Math.min(0, width), 2) + Math.pow(Math.min(0, height), 2));
+		return dist < 5;
+	}).filter(function(line){
+		return line.length > 1
+	}).map(wrap_line)
 	console.timeEnd("rough line estimation")
 
-	rough_lines.forEach(function(line){
-		// console.log(line)
-		var points = line.points;
-		c.beginPath()
-		c.moveTo(points[0].cx, points[0].cy)
-		for(var i = 1; i < points.length; i++){
-			c.lineTo(points[i].cx, points[i].cy)
-		}
-		c.strokeStyle = 'pink'
-		c.lineWidth = 5;
-		c.stroke()
-	})
+	// rough_lines.forEach(function(line){
+	// 	// console.log(line)
+	// 	var points = line.points;
+	// 	c.beginPath()
+	// 	c.moveTo(points[0].cx, points[0].cy)
+	// 	for(var i = 1; i < points.length; i++){
+	// 		c.lineTo(points[i].cx, points[i].cy)
+	// 	}
+	// 	c.strokeStyle = 'pink'
+	// 	c.lineWidth = 5;
+	// 	c.stroke()
+	// })
 
 	// var a = rough_lines[0], b = rough_lines[2];
 	// // var points = rough_lines[2].point
@@ -206,7 +208,18 @@ function textdetect(src){
 		var r = d > Math.PI ? (Math.PI * 2) - d : d;
 		return Math.abs(r)
 	}
-	equivalence_classes(rough_lines, function(a, b){
+
+	console.time('line merging')
+
+	function pairdist(x){
+		var a = x[0], b = x[1];
+		var width = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0),
+			height = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+		var dist = Math.sqrt(Math.pow(Math.min(0, width), 2) + Math.pow(Math.min(0, height), 2));
+		return dist;
+	}
+
+	var refined_lines = equivalence_classes(rough_lines, function(a, b){
 		if(adiff(a.angle, b.angle) > 0.1) return;
 
 		var stuff = []
@@ -214,13 +227,6 @@ function textdetect(src){
 			for(var j = 0; j < b.points.length; j++)
 				stuff.push([a.points[i], b.points[j]]);
 
-		function pairdist(x){
-			var a = x[0], b = x[1];
-			var width = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0),
-				height = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
-			var dist = Math.sqrt(Math.pow(Math.min(0, width), 2) + Math.pow(Math.min(0, height), 2));
-			return dist;
-		}
 		var minab = _.min(stuff, pairdist)
 		
 		if(pairdist(minab) > 30) return;
@@ -230,13 +236,13 @@ function textdetect(src){
 		var ba = Math.atan2(pa.cy - pb.cy, pa.cx - pb.cx);
 
 		if(adiff(ba, a.angle) > 0.1) return;
-
-		console.log(ba, a.angle, b.angle)
-
 		return true;
+	}).map(function(lines){
+		return wrap_line(_.flatten(_.pluck(lines, 'points')))
+	})
 
-	}).forEach(function(lines){
-		var points = _.flatten(_.pluck(lines, 'points'))
+	refined_lines.forEach(function(line){
+		var points = line.points;
 		c.beginPath()
 		c.moveTo(points[0].cx, points[0].cy)
 		for(var i = 1; i < points.length; i++){
@@ -246,6 +252,17 @@ function textdetect(src){
 		c.lineWidth = 2;
 		c.stroke()
 	});
+
+	console.timeEnd('line merging')
+
+	// largest empty rectangle algorithms
+
+	console.time('ransac')
+
+	_.sample(refined_lines, 2)
+
+	console.timeEnd('ransac')
+
 
 	// equivalence_classes(rough_lines, function(a, b){
 	// 	if(Math.abs(a.yi - b.yi) > 20) return false;
