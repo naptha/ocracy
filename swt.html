@@ -61,6 +61,7 @@ function Unit(a) { return Div(a, Mag(a)) }
 function Sub(a, b){ return [a[0] - b[0], a[1] - b[1]]}
 function Add(a, b){ return [a[0] + b[0], a[1] + b[1]]}
 function Rot90(a) { return [-a[1], a[0]] }
+function Sum(x) { for(var i = 0, s = 0; i < x.length; x++) s += x[i]; return s }
 function moveTo(a) { c.moveTo(a[0], a[1]) }
 function lineTo(a) { c.lineTo(a[0], a[1]) }
 
@@ -157,10 +158,9 @@ function textdetect(src){
 	
 
 	console.time('projective merging')
-	var a = rough_lines[0], b = rough_lines[2]
+	// it might be possible to make this faster with some spatial indexing
 	refined_lines = equivalence_classes(rough_lines, function(a, b){
 		if(adiff(a.angle, b.angle) > 0.1) return;
-
 		var origin = [a.points[0].cx, a.points[0].cy],
 			dir    = Unit([a.dx, a.dy]);	
 		
@@ -398,16 +398,34 @@ function textdetect(src){
 	})
 
 	var inliers = blobs.filter(function(k){ return k.inlier })
+	// find a vertical bound for the range of this text region
+	// perhaps instead of counting inliers, we should use the inlier-outlier ratio for a tighter bound
 	vgroups =_.countBy(inliers, 'k')
 	var tbound = 0, bbound = 0;
 	while(vgroups[tbound] > 0) tbound--;
 	while(vgroups[bbound] > 0) bbound++;
 	inliers = inliers.filter(function(s){ return s.k > tbound && s.k < bbound })
+	// find a horizontal bound for the range of this text region
 	hgroups =_.countBy(inliers, 'j')
 	var lbound = 0, rbound = 0;
 	while(hgroups[lbound] > 0) lbound--;
 	while(hgroups[rbound] > 0) rbound++;
 	inliers = inliers.filter(function(s){ return s.j > lbound && s.j < rbound })
+	// TODO?: perhaps refine the vertical bound given this new horizontal bound
+
+	var total = _.values(_.groupBy(inliers, 'k')).map(function(blobs){
+		var line = wrap_line(_.pluck(blobs, 's'));
+		return Mul([line.dx, line.dy], blobs.length)
+	});
+	var dir_adj = Rot90(Unit([Sum(_.pluck(total, 0)), Sum(_.pluck(total, 1))]))
+
+	console.log(dir_adj, dir, 'direction adjustment')
+
+	// calculate the slope of each line using the inliers
+	// calculate the proper line separation using inliers
+	// calculate the proper origin offset to minimize error
+	
+
 
 	blobs.forEach(function(b){
 		if(b.k > tbound && b.k < bbound && b.j > lbound && b.j < rbound){
@@ -430,8 +448,19 @@ function textdetect(src){
 	lineTo(Add(Add(origin, Mul(dir, len * bbound)), Mul(Rot90(dir), len * lbound)))
 	c.closePath()
 
-	c.strokeStyle = 'green'
+	c.strokeStyle = 'gray'
 	c.lineWidth = 10
+	c.stroke()
+
+	c.beginPath()
+	moveTo(Add(Add(origin, Mul(dir_adj, len * tbound)), Mul(Rot90(dir_adj), len * lbound)))
+	lineTo(Add(Add(origin, Mul(dir_adj, len * tbound)), Mul(Rot90(dir_adj), len * rbound)))
+	lineTo(Add(Add(origin, Mul(dir_adj, len * bbound)), Mul(Rot90(dir_adj), len * rbound)))
+	lineTo(Add(Add(origin, Mul(dir_adj, len * bbound)), Mul(Rot90(dir_adj), len * lbound)))
+	c.closePath()
+
+	c.strokeStyle = 'red'
+	c.lineWidth = 1
 	c.stroke()
 
 	
