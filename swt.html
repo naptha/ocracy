@@ -61,7 +61,10 @@ function Unit(a) { return Div(a, Mag(a)) }
 function Sub(a, b){ return [a[0] - b[0], a[1] - b[1]]}
 function Add(a, b){ return [a[0] + b[0], a[1] + b[1]]}
 function Rot90(a) { return [-a[1], a[0]] }
-function Sum(x) { for(var i = 0, s = 0; i < x.length; x++) s += x[i]; return s }
+function Sum(x) { for(var i = 0, s = 0; i < x.length; i++) s += x[i]; return s }
+function Mean(x) { return Sum(x) / x.length }
+function Diff(x) { for(var i = 1, k = []; i < x.length; i++) k[i - 1] = x[i] - x[i - 1]; return k}
+function Mod(x, n) { return x - Math.round(x / n) * n }
 function moveTo(a) { c.moveTo(a[0], a[1]) }
 function lineTo(a) { c.lineTo(a[0], a[1]) }
 
@@ -182,39 +185,39 @@ function textdetect(src){
 	console.timeEnd('projective merging')
 
 
-	console.time('angle merging')
+	// console.time('angle merging')
 
-	function pairdist(x){
-		var a = x[0], b = x[1];
-		var width = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0),
-			height = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
-		var dist = Math.sqrt(Math.pow(Math.min(0, width), 2) + Math.pow(Math.min(0, height), 2));
-		return dist;
-	}
+	// function pairdist(x){
+	// 	var a = x[0], b = x[1];
+	// 	var width = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0),
+	// 		height = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+	// 	var dist = Math.sqrt(Math.pow(Math.min(0, width), 2) + Math.pow(Math.min(0, height), 2));
+	// 	return dist;
+	// }
 
-	var refined_lines = equivalence_classes(rough_lines, function(a, b){
-		if(adiff(a.angle, b.angle) > 0.1) return;
+	// var refined_lines = equivalence_classes(rough_lines, function(a, b){
+	// 	if(adiff(a.angle, b.angle) > 0.1) return;
 
-		var stuff = []
-		for(var i = 0; i < a.points.length; i++)
-			for(var j = 0; j < b.points.length; j++)
-				stuff.push([a.points[i], b.points[j]]);
+	// 	var stuff = []
+	// 	for(var i = 0; i < a.points.length; i++)
+	// 		for(var j = 0; j < b.points.length; j++)
+	// 			stuff.push([a.points[i], b.points[j]]);
 
-		var minab = _.min(stuff, pairdist)
+	// 	var minab = _.min(stuff, pairdist)
 		
-		if(pairdist(minab) > 30) return;
+	// 	if(pairdist(minab) > 30) return;
 
-		var pa = minab[0], pb = minab[1];
+	// 	var pa = minab[0], pb = minab[1];
 		
-		var ba = Math.atan2(pa.cy - pb.cy, pa.cx - pb.cx);
+	// 	var ba = Math.atan2(pa.cy - pb.cy, pa.cx - pb.cx);
 
-		if(adiff(ba, a.angle) > 0.1) return;
-		return true;
-	}).map(function(lines){
-		return wrap_line(_.flatten(_.pluck(lines, 'points')))
-	})
+	// 	if(adiff(ba, a.angle) > 0.1) return;
+	// 	return true;
+	// }).map(function(lines){
+	// 	return wrap_line(_.flatten(_.pluck(lines, 'points')))
+	// })
 
-	console.timeEnd('angle merging')
+	// console.timeEnd('angle merging')
 
 	refined_lines.forEach(function(line){
 		var points = line.points;
@@ -372,54 +375,105 @@ function textdetect(src){
 		var origin = [a.cx, a.cy];
 		var len = Math.abs(Dot(Sub([b.cx, b.cy], origin), dir));
 
+
 	} while (boxdist(a, b) > 100 || adiff(a.angle, b.angle) > 0.1 || len < 5);
 	// find things that are nearby and almost-parallel
+	console.log('sampled len', len)
 
-	c.fillStyle = 'yellow'
-	c.fillRect(a.cx - 25, a.cy - 25, 50, 50)
-	for(var n = -10; n < 10; n++){
-		moveTo(Add(Add(origin, Mul(dir, len * n)), Mul(Rot90(dir), -1000)))
-		lineTo(Add(Add(origin, Mul(dir, len * n)), Mul(Rot90(dir),  1000)))
-		c.strokeStyle = 'orange'
-		c.lineWidth = 1
-		c.stroke()
+	// c.fillStyle = 'yellow'
+	// c.fillRect(a.cx - 25, a.cy - 25, 50, 50)
+	moveTo(Add(Add(origin, Mul(dir, 0)), Mul(Rot90(dir), -1000)))
+	lineTo(Add(Add(origin, Mul(dir, 0)), Mul(Rot90(dir),  1000)))
+
+	moveTo(Add(Add(origin, Mul(dir, len)), Mul(Rot90(dir), -1000)))
+	lineTo(Add(Add(origin, Mul(dir, len)), Mul(Rot90(dir),  1000)))
+	// for(var n = -10; n < 10; n++){
+	// 	moveTo(Add(Add(origin, Mul(dir, len * n)), Mul(Rot90(dir), -1000)))
+	// 	lineTo(Add(Add(origin, Mul(dir, len * n)), Mul(Rot90(dir),  1000)))
+	c.strokeStyle = 'orange'
+	c.lineWidth = 5
+	c.stroke()
+	// }
+
+	function blob_generator(origin, dir, len){
+		return function blobgen(s){
+			var a1 = Dot(Sub([s.cx, s.cy], origin), dir);
+			// TODO: make error something more aware of contour geometry
+			// like the distance from the edge where passing through the shape
+			// counts as 0 error
+			var err = Math.abs(Math.abs(a1 % len) - len/2) - len/2;
+			// a better metric for whetheor or not we have the valid configuration
+			// is to measure the number of things in the expected range
+			// and also the ones which lie in between the expected range
+			// and assign that a cost
+			var b1 = Dot(Sub([s.cx, s.cy], origin), Rot90(dir));
+			return {
+				inlier: Math.abs(err) < 10,
+				a1: a1,
+				b1: b1,
+				k: Math.round(a1 / len),
+				j: Math.round(b1 / len),
+				s: s
+			}
+		}
 	}
 
-	var blobs = contours.map(function(s){
-		var a1 = Dot(Sub([s.cx, s.cy], origin), dir);
-		var err = Math.abs(Math.abs(a1 % len) - len/2) - len/2;
-		var b1 = Dot(Sub([s.cx, s.cy], origin), Rot90(dir));
-		return {
-			inlier: Math.abs(err) < 10,
-			k: Math.round(a1 / len),
-			j: Math.round(b1 / len),
-			s: s
-		}
-	})
-
-	var inliers = blobs.filter(function(k){ return k.inlier })
 	// find a vertical bound for the range of this text region
-	// perhaps instead of counting inliers, we should use the inlier-outlier ratio for a tighter bound
-	vgroups =_.countBy(inliers, 'k')
-	var tbound = 0, bbound = 0;
-	while(vgroups[tbound] > 0) tbound--;
-	while(vgroups[bbound] > 0) bbound++;
-	inliers = inliers.filter(function(s){ return s.k > tbound && s.k < bbound })
-	// find a horizontal bound for the range of this text region
-	hgroups =_.countBy(inliers, 'j')
-	var lbound = 0, rbound = 0;
-	while(hgroups[lbound] > 0) lbound--;
-	while(hgroups[rbound] > 0) rbound++;
-	inliers = inliers.filter(function(s){ return s.j > lbound && s.j < rbound })
+	function inlier_ratio(range, aggregator){
+		return _.mapValues(_.groupBy(range, aggregator), function(x){
+			var d = _.countBy(x, 'inlier');
+			return (d.true || 0) / ((d.true || 0) + (d.false || 0));
+		})
+	}
+
+	function bound_inliers(range, aggregator, bthresh){
+		var groups = inlier_ratio(range, aggregator);
+		var lower = 0, upper = 0;
+		while(groups[lower] > bthresh) lower--;
+		while(groups[upper] > bthresh) upper++;
+		if(lower == 0 || upper == 0) console.error(aggregator, " grouping yielded no results");
+		return [lower, upper]
+	}
+
+	function thresh_filter(range, thresh, prop){
+		return range.filter(function(s){ return s[prop] > thresh[0] && s[prop] < thresh[1] })
+	}
+
+
+	var blobs = contours.map(blob_generator(origin, dir, len))
+	var range = blobs.slice(0); 
+	
+	var bthresh = 0.7;
+	var vthresh = bound_inliers(range, 'k', bthresh);
+	range = thresh_filter(range, vthresh, 'k')
+	var hthresh = bound_inliers(range, 'j', bthresh);
+	range = thresh_filter(range, hthresh, 'j')
 	// TODO?: perhaps refine the vertical bound given this new horizontal bound
 
-	var total = _.values(_.groupBy(inliers, 'k')).map(function(blobs){
+	lines = _.groupBy(_.where(range, { inlier: true }), 'k');
+	var total = _.values(lines).map(function(blobs){
 		var line = wrap_line(_.pluck(blobs, 's'));
 		return Mul([line.dx, line.dy], blobs.length)
 	});
 	var dir_adj = Rot90(Unit([Sum(_.pluck(total, 0)), Sum(_.pluck(total, 1))]))
+	var len_adj = Mean(Diff(_.sortBy(_.values(lines).map(function(e){
+		return Mean(_.pluck(e, 'a1'))
+	})))); // what is this? lisp?
+	// TODO: refine the choice of origin
+	var ori_adj = Mean(_.values(lines).map(function(e){return Mod(Mean(_.pluck(e, 'a1')),24.901969835719317)}))
 
 	console.log(dir_adj, dir, 'direction adjustment')
+	console.log(len_adj, len, 'length adjustment')
+	console.log(ori_adj, 'origin adjustment')
+
+	var blobs2 = contours.map(blob_generator(origin, dir_adj, len_adj))
+	var range2 = blobs2;
+	var vthresh2 = bound_inliers(range2, 'k', bthresh);
+	range2 = thresh_filter(range2, vthresh2, 'k')
+	var hthresh2 = bound_inliers(range2, 'j', bthresh);
+	range2 = thresh_filter(range2, hthresh2, 'j')
+	vthresh2 = bound_inliers(range2, 'k', bthresh);
+	range2 = thresh_filter(range2, vthresh2, 'k')
 
 	// calculate the slope of each line using the inliers
 	// calculate the proper line separation using inliers
@@ -427,8 +481,8 @@ function textdetect(src){
 	
 
 
-	blobs.forEach(function(b){
-		if(b.k > tbound && b.k < bbound && b.j > lbound && b.j < rbound){
+	blobs2.forEach(function(b){
+		if(b.k > vthresh2[0] && b.k < vthresh2[1] && b.j > hthresh2[0] && b.j < hthresh2[1]){
 			var s = b.s;
 			if(b.inlier){
 				c.fillStyle = 'green'
@@ -440,12 +494,21 @@ function textdetect(src){
 		}
 	})
 
+	c.beginPath()
+	for(var n = -10; n < 10; n++){
+		moveTo(Add(Add(origin, Mul(dir_adj, len_adj * n)), Mul(Rot90(dir_adj), -1000)))
+		lineTo(Add(Add(origin, Mul(dir_adj, len_adj * n)), Mul(Rot90(dir_adj),  1000)))
+		c.strokeStyle = 'red'
+		c.lineWidth = 1
+		c.stroke()
+	}
+
 
 	c.beginPath()
-	moveTo(Add(Add(origin, Mul(dir, len * tbound)), Mul(Rot90(dir), len * lbound)))
-	lineTo(Add(Add(origin, Mul(dir, len * tbound)), Mul(Rot90(dir), len * rbound)))
-	lineTo(Add(Add(origin, Mul(dir, len * bbound)), Mul(Rot90(dir), len * rbound)))
-	lineTo(Add(Add(origin, Mul(dir, len * bbound)), Mul(Rot90(dir), len * lbound)))
+	moveTo(Add(Add(origin, Mul(dir, len * vthresh[0])), Mul(Rot90(dir), len * hthresh[0])))
+	lineTo(Add(Add(origin, Mul(dir, len * vthresh[0])), Mul(Rot90(dir), len * hthresh[1])))
+	lineTo(Add(Add(origin, Mul(dir, len * vthresh[1])), Mul(Rot90(dir), len * hthresh[1])))
+	lineTo(Add(Add(origin, Mul(dir, len * vthresh[1])), Mul(Rot90(dir), len * hthresh[0])))
 	c.closePath()
 
 	c.strokeStyle = 'gray'
@@ -453,13 +516,24 @@ function textdetect(src){
 	c.stroke()
 
 	c.beginPath()
-	moveTo(Add(Add(origin, Mul(dir_adj, len * tbound)), Mul(Rot90(dir_adj), len * lbound)))
-	lineTo(Add(Add(origin, Mul(dir_adj, len * tbound)), Mul(Rot90(dir_adj), len * rbound)))
-	lineTo(Add(Add(origin, Mul(dir_adj, len * bbound)), Mul(Rot90(dir_adj), len * rbound)))
-	lineTo(Add(Add(origin, Mul(dir_adj, len * bbound)), Mul(Rot90(dir_adj), len * lbound)))
+	moveTo(Add(Add(origin, Mul(dir_adj, len * vthresh[0])), Mul(Rot90(dir_adj), len * hthresh[0])))
+	lineTo(Add(Add(origin, Mul(dir_adj, len * vthresh[0])), Mul(Rot90(dir_adj), len * hthresh[1])))
+	lineTo(Add(Add(origin, Mul(dir_adj, len * vthresh[1])), Mul(Rot90(dir_adj), len * hthresh[1])))
+	lineTo(Add(Add(origin, Mul(dir_adj, len * vthresh[1])), Mul(Rot90(dir_adj), len * hthresh[0])))
 	c.closePath()
 
 	c.strokeStyle = 'red'
+	c.lineWidth = 1
+	c.stroke()
+
+	c.beginPath()
+	moveTo(Add(Add(origin, Mul(dir_adj, len * vthresh2[0])), Mul(Rot90(dir_adj), len * hthresh2[0])))
+	lineTo(Add(Add(origin, Mul(dir_adj, len * vthresh2[0])), Mul(Rot90(dir_adj), len * hthresh2[1])))
+	lineTo(Add(Add(origin, Mul(dir_adj, len * vthresh2[1])), Mul(Rot90(dir_adj), len * hthresh2[1])))
+	lineTo(Add(Add(origin, Mul(dir_adj, len * vthresh2[1])), Mul(Rot90(dir_adj), len * hthresh2[0])))
+	c.closePath()
+
+	c.strokeStyle = 'blue'
 	c.lineWidth = 1
 	c.stroke()
 
