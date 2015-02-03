@@ -195,68 +195,14 @@ function SequenceRecognizer(ninput, nstates, codec) {
 // predict an integer sequence of codes
 SequenceRecognizer.prototype.predictSequence = function(xs) {
     if(xs[0].length != this.Ni) throw "wrong image height";
+    
     this.output = this.lstm.forward(xs);
-
-    // return array_split(this.output
-    //     .map(x => Math.max.apply(Math, x) > 0.6 && x)
-    //     .filter(x => x)
-    //     .map(x => max_index(x))).map(x=>x[0])
-
-    // return array_split(this.output
-    //     .map(x => Math.max.apply(Math, x) > 0.6 && x)
-    //     .filter(x => x)
-    //     .map(x => max_index(x)),
-    //     (a,b) => (a == 0 && b == 0) || (a != 0 && b != 0)
-    //     ).map(x=>x[0])
-
-    // return array_split(
-    //         this.output.map(x => [max_index(x), Math.max.apply(Math, x)]),
-    //         (a,b) => (a[0] == 0 && b[0] == 0) || (a[0] != 0 && b[0] != 0)
-    //     )
-    //     .map(k => max_element(k, x => x[1]))
-    //     .filter(k => k[1] > 0.7)
-    //     .map(x => x[0])
-
-    // return array_split(
-    //         this.output.map(function(x){ return [max_index(x), Math.max.apply(Math, x)] }),
-    //         function(a,b){ return (a[0] == 0 && b[0] == 0) || (a[0] != 0 && b[0] != 0) }
-    //     )
-    //     .map(function(k){return max_element(k, function(x){ return x[1] })})
-    //     .filter(function(k){return k[1] > 0.7})
-    //     .map(function(x){return x[0]})
 
     function f(e){ return 1 - e[0] > 0.7 }
 
-    // var merp = array_conv3(this.output.map(function(e){ return 1 - e[0] }), function(a, b, c){
-    //     // return Math.max(a, b, c) * 0.5 + b * 0.5
-    //     // return Math.exp(b) / (Math.exp(a) + Math.exp(b) + Math.exp(c))
-    //     // return Math.max(a, b, c)
-    //     // return 0.1 * a + 0.8 * b + 0.1 * c;
-    //     // return Math.max(a, b) / 2 + Math.max(b, c) / 2
-    //     return Math.max(b, c)
-    //     // return Math.max(a, b, c) / 2 + Math.min(a, b, c) / 2
-    // });
-    
-    // // console.log(merp)
-
-    // function g(e){ return e > 0.6 }
-
-    // return array_split(this.output.map(function(e, i){ return [e, merp[i]] }), function(a, b){
-    //     return g(a[1]) == g(b[1])
-    // })
-
-
     return array_split(this.output, function(a, b){
-        // TODO: it might be a good idea to memoize this so f isn't called as much
-        // not for performance (because this part is not close to the perf bottleneck)
-        // but perhaps code clarity
         return f(a) == f(b)
     })
-    // .map(function(e){
-    //     // console.log(e)
-    //     // return e[0] 
-    //     // return e.map(function(k){ return k[0] })
-    // })
     .filter(function(e){
         // return f(e[0]) // remove the groups not meeting the threshold
         return array_sum(e.map(function(k){return 1-k[0]})) > 0.9
@@ -268,6 +214,5 @@ SequenceRecognizer.prototype.predictSequence = function(xs) {
 
 
 SequenceRecognizer.prototype.predictString = function(xs) {
-    // return this.predictSequence(xs).map(x=>this.codec[x]).join('')
     return this.predictSequence(xs).map(function(x){return this.codec[x]}).join('')
 }
