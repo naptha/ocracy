@@ -1,12 +1,13 @@
 <canvas id="canvas"></canvas>
-<script src="jsfeat-custom.js"></script>
-<script src="lodash.js"></script>
-<script src="calipers2.js"></script>
-<script src="helpers.js"></script>
-<script src="lstm.js"></script>
-<script src="zeus.min.js"></script>
-<script src="test.js"></script>
-<script src="swtcore.js"></script>
+<script src="lib/jsfeat-custom.js"></script>
+<script src="lib/lodash.js"></script>
+<!-- <script src="calipers2.js"></script> -->
+<script src="src/helpers.js"></script>
+<script src="src/lstm.js"></script>
+<script src="models/zeus.min.js"></script>
+<script src="experiments/test.js"></script>
+<script src="src/swtcore.js"></script>
+<script src="src/chull.js"></script>
 
 <script>
 
@@ -14,7 +15,7 @@ onload = function(){}
 
 
 var img = new Image();
-img.src = 'rotation.png';
+img.src = 'images/rotation.png';
 
 var canvas = document.getElementById('canvas');
 var ctx = canvas.getContext('2d')
@@ -134,42 +135,52 @@ function textdetect(src){
 	console.time('rotating calipers')
 	var lines = regions.map(function(region){
 		var points = region.contours;
-		caliper = new RotatingCalipers(points.map(function(p){
-			var x = p % width, y = Math.floor(p / width);
-			return [x, y]
-		}))
-		var hull = caliper.convexHull();
+		// caliper = new RotatingCalipers(points.map(function(p){
+		// 	var x = p % width, y = Math.floor(p / width);
+		// 	return [x, y]
+		// }))
+		// var hull = caliper.convexHull();
+		var nicelyFormatedPoints = points.map(function(p){
+			return {x:p % width, y:Math.floor(p / width)}
+		})
+		var hull = convexHull(nicelyFormatedPoints)
 
 		dd.beginPath()
-		dd.moveTo(hull[0][0], hull[0][1])
+		dd.moveTo(hull[0].x, hull[0].y)
 		for(var i = 1; i < hull.length; i++){
-			dd.lineTo(hull[i][0], hull[i][1])
+			dd.lineTo(hull[i].x, hull[i].y)
 		}
 		dd.closePath()
 		dd.strokeStyle = 'yellow'
 		dd.lineWidth = 4
 		dd.stroke()
 
-		var rect = caliper.minAreaEnclosingRectangle();
+		// var rect = caliper.minAreaEnclosingRectangle();
 		// console.log(rect.angle)
-		maer = rect.vertices;
+		// maer = rect.vertices;
+
+		var maer = min_enclosing_rect(hull)
 
 		dd.beginPath()
-		dd.moveTo(maer[0][0], maer[0][1])
+		dd.moveTo(maer[0].x, maer[0].y)
 		for(var i = 1; i < maer.length; i++){
-			dd.lineTo(maer[i][0], maer[i][1])
+			dd.lineTo(maer[i].x, maer[i].y)
 		}
 		dd.closePath()
 		dd.strokeStyle = 'green'
 		dd.lineWidth = 4
 		dd.stroke()
 
-		var roof = _.sortBy(_.sortBy(maer, 1).slice(0, 2), 0);
-		var dx = roof[1][0] - roof[0][0], dy = roof[1][1] - roof[0][1];
+		var kevinMaer = maer.map(function(p){
+			return [p.x,p.y]
+		})
+		var roof = _.sortBy(_.sortBy(kevinMaer, 1).slice(0, 2), 0);
+		var dx = roof[1][0] - roof[0][0], 
+			dy = roof[1][1] - roof[0][1];
 		angle = Math.atan2(dy, dx)
 		console.log('angle', angle)
 
-		var cx = Mean(_.pluck(maer, 0)), cy = Mean(_.pluck(maer, 1));
+		var cx = Mean(_.pluck(kevinMaer, 0)), cy = Mean(_.pluck(kevinMaer, 1));
 
 		// dd.beginPath()
 		// dd.moveTo(cx - 5, cy - 5)
