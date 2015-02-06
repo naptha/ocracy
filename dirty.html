@@ -132,7 +132,7 @@ function textdetect(src){
 	console.timeEnd('region finding')
 	dd = visualize_matrix(dilmat, regions)
 	console.time('rotating calipers')
-	regions.map(function(region){
+	var lines = regions.map(function(region){
 		var points = region.contours;
 		caliper = new RotatingCalipers(points.map(function(p){
 			var x = p % width, y = Math.floor(p / width);
@@ -184,26 +184,22 @@ function textdetect(src){
 		var dim = Math.ceil(Math.max(region.width, region.height) / 2)
 		var hist = new Uint32Array(dim * 2);
 		var range_min = Infinity, range_max = 0;
-		contours.forEach(function(s){
-			if(s.cx > region.x0 && s.cx < region.x1 && s.cy > region.y0 && s.cy < region.y1){
-				var proj = Dot(Sub([s.cx, s.cy], [cx, cy]), dir);
-				dd.fillRect(cx, cy + proj, 5, 5)
 
-				// var r = Math.max(s.width, s.height) / 2;
-				var r = Math.sqrt(s.width * s.height) / 2;
-				for(var i = Math.floor(proj - r); i < proj + r; i++){
-					hist[i + dim]++;
-					range_min = Math.min(range_min, i + dim);
-					range_max = Math.max(range_max, i + dim);
-				}
+		var in_region = contours.filter(function(s){
+			return s.cx > region.x0 && s.cx < region.x1 && s.cy > region.y0 && s.cy < region.y1
+		})
 
-				// var imin = Dot(Sub([s.cx, s.y0], [cx, cy]), dir),
-				// 	imax = Dot(Sub([s.cx, s.y1], [cx, cy]), dir);
 
-				// for(var i = Math.floor(imin); i < imax; i++){
-				// 	hist[i + dim]++;
-				
-				// }
+		in_region.forEach(function(s){
+			var proj = Dot(Sub([s.cx, s.cy], [cx, cy]), dir);
+			dd.fillRect(cx, cy + proj, 5, 5)
+
+			// var r = Math.max(s.width, s.height) / 2;
+			var r = Math.sqrt(s.width * s.height) / 2;
+			for(var i = Math.floor(proj - r); i < proj + r; i++){
+				hist[i + dim]++;
+				range_min = Math.min(range_min, i + dim);
+				range_max = Math.max(range_max, i + dim);
 			}
 		})
 		dd.fillStyle = '#007fff'
@@ -221,6 +217,20 @@ function textdetect(src){
 		var peaks = array_split(_.range(wumbo.length), function(x,y){return t(wumbo[x]) == t(wumbo[y])})
 			.filter(function(x){return t(wumbo[x[0]])})
 			.map(function(x){return _.max(x, function(k){return wumbo[k]})});
+
+		peaks.forEach(function(p){
+			var inliers = [];
+			in_region.forEach(function(s){
+				var proj = Dot(Sub([s.cx, s.cy], [cx, cy]), dir);
+				if(Math.abs((p - dim) - proj) < 5){
+					inliers.push(s)
+				}
+			});
+			inliers.forEach(function(s){
+				c.fillStyle = 'green'
+				c.fillRect(s.cx, s.cy, 5, 5)
+			})
+		})
 
 		peaks.forEach(function(p){
 			c.beginPath()
